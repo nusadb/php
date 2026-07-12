@@ -1,0 +1,19 @@
+{
+  "name": "nusadb/nusadb",
+  "description": "Pure-PHP client for NusaDB (Nusa Wire Protocol) with a PDO-style API",
+  "type": "library",
+  "license": "Apache-2.0",
+  "require": {
+    "php": ">=7.2",
+    "ext-hash": "*",
+    "ext-sockets": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "NusaDB\\": "src/"
+    }
+  },
+  "scripts": {
+    "test": "php test/test.php"
+  }
+}
