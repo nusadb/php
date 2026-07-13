@@ -1,0 +1,102 @@
+name: Release
+
+# Publishes nusadb/nusadb to Packagist.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Packagist derives the release version from the git tag, which is why composer.json has no
+# `version` field -- do not add one, or the two can disagree.
+#
+# Publishing is a one-time setup, then automatic:
+#   1. Submit https://github.com/nusadb/php once at https://packagist.org/packages/submit
+#   2. Packagist adds a GitHub webhook and picks up new tags on its own.
+#
+# The notify step below is a belt-and-braces push in case that webhook is missing or failed.
+# It is skipped unless both PACKAGIST_USERNAME and PACKAGIST_API_TOKEN secrets are set
+# (token: https://packagist.org/profile/ -> "Show API Token").
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.2', '8.3'] # the floor declared in composer.json, and current
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: hash, sockets
+          coverage: none
+
+      - name: Reject a `version` field in composer.json
+        run: |
+          if php -r 'exit(isset(json_decode(file_get_contents("composer.json"), true)["version"]) ? 0 : 1);'; then
+            echo '::error::composer.json declares a "version" field; Packagist takes the version from the git tag. Remove it.'
+            exit 1
+          fi
+          echo "composer.json has no hardcoded version (correct)."
+
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-lock
+
+      # Gate on what is verifiable without a live server: the suite in test/ boots a real
+      # `nusadb-server` binary that this repository does not contain.
+      - name: Syntax check
+        run: find src autoload.php test -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+      - name: Autoload every class
+        run: |
+          php -r '
+            require __DIR__ . "/autoload.php";
+            foreach (["NusaDB\\Connection","NusaDB\\Statement","NusaDB\\Protocol","NusaDB\\Scram","NusaDB\\Notification","NusaDB\\NusaException"] as $c) {
+              if (!class_exists($c)) { fwrite(STDERR, "::error::autoload failed for $c\n"); exit(1); }
+              echo "ok: $c\n";
+            }
+          '
+
+  notify-packagist:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Force a Packagist update
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_API_TOKEN: ${{ secrets.PACKAGIST_API_TOKEN }}
+        run: |
+          if [ -z "$PACKAGIST_USERNAME" ] || [ -z "$PACKAGIST_API_TOKEN" ]; then
+            echo "::notice::PACKAGIST_USERNAME / PACKAGIST_API_TOKEN not set; relying on the Packagist GitHub webhook to pick up ${GITHUB_REF_NAME}."
+            exit 0
+          fi
+          status=$(curl -sS -o /tmp/body -w '%{http_code}' -XPOST \
+            -H 'content-type:application/json' \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_API_TOKEN}" \
+            -d '{"repository":{"url":"https://github.com/nusadb/php"}}')
+          cat /tmp/body; echo
+          if [ "$status" != "202" ] && [ "$status" != "200" ]; then
+            echo "::error::Packagist update failed with HTTP $status"
+            exit 1
+          fi
+          echo "Packagist notified of ${GITHUB_REF_NAME}."
+
+  github-release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag

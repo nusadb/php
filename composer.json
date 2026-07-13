@@ -3,6 +3,12 @@
   "description": "Pure-PHP client for NusaDB (Nusa Wire Protocol) with a PDO-style API",
   "type": "library",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/nusadb/php",
+  "support": {
+    "issues": "https://github.com/nusadb/php/issues",
+    "source": "https://github.com/nusadb/php"
+  },
+  "keywords": ["nusadb", "database", "sql", "driver", "pdo"],
   "require": {
     "php": ">=7.2",
     "ext-hash": "*",

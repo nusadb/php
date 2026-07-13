@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [master, 'ci/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint (php ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # composer.json requires php >=7.2 -- verify the sources actually parse on all of it.
+        php: ['7.2', '7.4', '8.0', '8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: hash, sockets
+          coverage: none
+
+      # The test suite (test/test.php) boots a real `nusadb-server` binary, which is not
+      # present in this repository, so it cannot run here. What is verifiable standalone:
+      # every source file parses, and the autoloader maps every class.
+      - name: Syntax check
+        run: find src autoload.php test -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+      - name: Autoload every class
+        run: |
+          php -r '
+            require __DIR__ . "/autoload.php";
+            $classes = [
+              "NusaDB\\Connection",
+              "NusaDB\\Statement",
+              "NusaDB\\Protocol",
+              "NusaDB\\Scram",
+              "NusaDB\\Notification",
+              "NusaDB\\NusaException",
+            ];
+            foreach ($classes as $c) {
+              if (!class_exists($c)) {
+                fwrite(STDERR, "::error::autoload failed for $c\n");
+                exit(1);
+              }
+              echo "ok: $c\n";
+            }
+          '
+
+  composer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: hash, sockets
+          coverage: none
+
+      # --strict turns Packagist's own metadata warnings into failures, so a manifest that
+      # would be rejected or published with missing fields is caught before the tag.
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-lock
