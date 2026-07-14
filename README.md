@@ -125,17 +125,6 @@ echo $note->channel, ' ', $note->payload;
 $conn->unlisten('orders');
 ```
 
-## Tests
-
-```bash
-cargo build -p nusadb-server
-node drivers/node/test/test.js
-```
-
-The tests boot a real `nusadb-server` (ephemeral port, honouring
-`CARGO_TARGET_DIR`) and cover simple/parameterised/prepared queries, errors, the
-pool, and SCRAM auth.
-
 ## License
 
 Apache-2.0.
