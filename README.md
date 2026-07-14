@@ -125,16 +125,6 @@ echo $note->channel, ' ', $note->payload;
 $conn->unlisten('orders');
 ```
 
-## Test
-
-```bash
-cargo build -p nusadb-server
-php drivers/php/test/test.php
-```
-
-The test boots a real `nusadb-server` (ephemeral port, honouring `CARGO_TARGET_DIR`)
-and covers simple/parameterised/prepared queries, errors, transaction commit/rollback
-and transaction-state errors, and SCRAM auth.
 
 ## License
 
